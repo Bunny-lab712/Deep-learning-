@@ -1,0 +1,94 @@
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("osmankagankurnaz/acne-dataset-in-yolov8-format")
+
+print("Path to dataset files:", path)
+
+!pip install gradio
+
+import gradio as gr
+from PIL import Image
+import io
+import os
+import numpy as np
+
+# --- Simulate a database of skin diseases ---
+DATABASE_DIR = "skin_disease_database"  # Directory to store example images
+os.makedirs(DATABASE_DIR, exist_ok=True)
+
+# Create some dummy disease data and save example images (for demonstration)
+disease_data = {
+    "acne": {
+        "info": "Acne is a common skin condition that occurs when hair follicles become clogged with oil and dead skin cells.",
+        "cause": "Hormonal changes, excess oil production, bacteria, and inflammation.",
+        "cure": "Cleanse regularly, use topical treatments (benzoyl peroxide, salicylic acid), consult a dermatologist for severe cases."
+    },
+    "eczema": {
+        "info": "Eczema (atopic dermatitis) is a condition that makes your skin red and itchy.",
+        "cause": "A combination of genetic and environmental factors, immune system dysfunction.",
+        "cure": "Moisturize regularly, avoid irritants, use topical corticosteroids or other prescribed medications."
+    },
+    "psoriasis": {
+        "info": "Psoriasis is a skin condition that causes red, itchy, scaly patches, most commonly on the knees, elbows, trunk and scalp.",
+        "cause": "An autoimmune disorder that speeds up skin cell growth.",
+        "cure": "Topical treatments (corticosteroids, vitamin D analogs), light therapy, systemic medications (prescribed by a doctor)."
+    }
+}
+
+# Create dummy images (replace with actual images for a real database)
+def create_dummy_image(filename, color):
+    img = Image.new('RGB', (100, 100), color=color)
+    img.save(os.path.join(DATABASE_DIR, filename))
+
+create_dummy_image("acne_example.png", "lightcoral")
+create_dummy_image("eczema_example.png", "navajowhite")
+create_dummy_image("psoriasis_example.png", "lightsalmon")
+
+def mse(imageA, imageB):
+    # Calculate the Mean Squared Error between two images
+    return np.sum((np.array(imageA) - np.array(imageB)) ** 2)
+
+def compare_image_to_database(uploaded_image):
+    try:
+        # Ensure the uploaded image is in the correct format
+        uploaded_img = uploaded_image.convert("RGB").resize((100, 100))  # Resize for comparison
+        best_match = None
+        min_error = float('inf')
+
+        for disease, data in disease_data.items():
+            try:
+                # Load a representative image from the dummy database
+                db_img_path = os.path.join(DATABASE_DIR, f"{disease}_example.png")
+                db_img = Image.open(db_img_path).convert("RGB").resize((100, 100))  # Resize for comparison
+
+                # Calculate the MSE between the uploaded image and the database image
+                error = mse(uploaded_img, db_img)
+
+                if error < min_error:
+                    min_error = error
+                    best_match = disease
+            except FileNotFoundError:
+                print(f"Warning: Example image for {disease} not found.")
+                continue
+
+        if best_match:
+            disease_info = disease_data[best_match]
+            output_text = f"Based on the image, it seems similar to **{best_match.upper()}**.\n\n"
+            output_text += f"**What it is:** {disease_info['info']}\n\n"
+            output_text += f"**Possible Causes:** {disease_info['cause']}\n\n"
+            output_text += f"**General Information (Consult a doctor for treatment):** {disease_info['cure']}"
+            return output_text
+        else:
+            return "Could not find a strong match in our database. Please consult a dermatologist for diagnosis."
+
+    except Exception as e:
+        return f"Error processing image: {e}"
+
+iface = gr.Interface(
+    fn=compare_image_to_database,
+    inputs=gr.Image(type="pil", label="Upload Skin Image"),  # Set type to "pil"
+    outputs=gr.Markdown(label="Analysis Result")
+)
+
+iface.launch(share=True)
